@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-CPI_GEN="cargo run -p glam-cpi-gen glam --config glam-tests/config.yaml"
+CPI_GEN="cargo run -q -p glam-cpi-gen glam --config glam-tests/config.yaml"
 
 #
 # DRIFT
@@ -32,7 +32,7 @@ diff $DRIFT_OUT glam-tests/drift-expected.rs > /dev/null
 if [ $? -ne 0 ]; then
     echo "Test failed!"
     echo "Diff between generated and expected:"
-    # diff $DRIFT_OUT glam-tests/drift-expected.rs 
+    diff $DRIFT_OUT glam-tests/drift-expected.rs 
     exit 1
 else
     echo "Test passed!"
