@@ -118,7 +118,12 @@ pub struct Generator {
 }
 
 impl Generator {
-    pub fn generate_glam_code(&self, ixs: &[String], skip_imports: bool, idl_name: Option<String>) -> TokenStream {
+    pub fn generate_glam_code(
+        &self,
+        ixs: &[String],
+        skip_imports: bool,
+        idl_name: Option<String>,
+    ) -> TokenStream {
         let idl = &self.idl;
         let idl_name = idl_name.unwrap_or(idl.name.clone());
         let program_name_pascal_case = format_ident!("{}", idl_name.to_pascal_case());
@@ -141,11 +146,22 @@ impl Generator {
         let imports = if skip_imports {
             quote! {}
         } else {
+            let program_import = if program_name_pascal_case == idl_name_pascal_case {
+                quote! {
+                    pub use #program_name_snake_case::program::#program_name_pascal_case;
+                }
+            } else {
+                quote! {
+                pub use #program_name_snake_case::program::#idl_name_pascal_case as #program_name_pascal_case;
+                }
+            };
+
             quote! {
                 use crate::state::{acl::{self, *}, StateAccount};
                 use anchor_lang::prelude::*;
 
-                pub use #program_name_snake_case::program::#idl_name_pascal_case as #program_name_pascal_case;
+                #program_import
+
                 use #program_name_snake_case::typedefs::*;
             }
         };
