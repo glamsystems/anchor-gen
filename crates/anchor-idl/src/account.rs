@@ -63,11 +63,14 @@ pub fn generate_glam_account_fields(
     name: &str,
     accounts: &[IdlAccountItem],
     ix_code_gen_config: Option<&GlamIxCodeGenConfig>,
-) -> (TokenStream, TokenStream) {
+) -> (TokenStream, TokenStream, Vec<String>, Vec<String>) {
     let vault_aliases =
         ix_code_gen_config.map_or(Vec::new(), |c| c.vault_aliases.clone().unwrap_or_default());
 
     let mut all_structs: Vec<TokenStream> = vec![];
+    let mut accounts_to_keep: Vec<String> = vec![]; // accounts to keep in the glam proxy ix
+    let mut all_accounts: Vec<String> = vec![]; // all accounts used by the orignal ix
+
     let all_fields = accounts
         .iter()
         .map(|account| match account {
@@ -99,9 +102,12 @@ pub fn generate_glam_account_fields(
 
                 let acc_name = format_ident!("{}", info.name.to_snake_case());
                 // result
+                all_accounts.push(info.name.to_snake_case());
                 if vault_aliases.contains(&info.name.to_snake_case()) {
                     None
                 } else {
+                    accounts_to_keep.push(info.name.to_snake_case());
+
                     Some(quote! {
                        #annotation
                        pub #acc_name: #ty
@@ -112,7 +118,7 @@ pub fn generate_glam_account_fields(
                 let field_name = format_ident!("{}{}", name, inner.name.to_snake_case());
                 let sub_name = format!("{}{}", name, inner.name.to_pascal_case());
                 let sub_ident = format_ident!("{}", &sub_name);
-                let (sub_structs, sub_fields) =
+                let (sub_structs, sub_fields, _all_accounts, _accounts_to_keep) =
                     generate_glam_account_fields(&sub_name, &inner.accounts, ix_code_gen_config);
                 all_structs.push(sub_structs);
                 all_structs.push(quote! {
@@ -136,5 +142,7 @@ pub fn generate_glam_account_fields(
         quote! {
             #(#all_fields),*
         },
+        all_accounts,
+        accounts_to_keep,
     )
 }

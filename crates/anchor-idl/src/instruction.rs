@@ -5,6 +5,51 @@ use quote::{format_ident, quote};
 use syn::Ident;
 
 use crate::GlamIxCodeGenConfig;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct AccuntInfo {
+    name: String,
+    index: u16,
+    writable: bool,
+    signer: bool,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct IxInfo {
+    src_ix_name: String,
+    src_discriminator: [u8; 8],
+    dst_ix_name: String,
+    dst_discriminator: [u8; 8],
+    dynamic_accounts: Vec<AccuntInfo>,
+    static_accounts: Vec<AccuntInfo>,
+    index_map: Vec<i32>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[serde(default)]
+pub struct GlamIxRemapping {
+    pub program_id: String,
+    pub instructions: Vec<IxInfo>,
+}
+
+fn compute_discriminator(ix_name: &str) -> [u8; 8] {
+    // Format the identifier as per Anchor's convention
+    let identifier = format!("global:{}", ix_name);
+
+    // Compute the SHA-256 hash of the identifier
+    let mut hasher = Sha256::new();
+    hasher.update(identifier.as_bytes());
+    let hash = hasher.finalize();
+
+    // Extract the first 8 bytes as the discriminator
+    let mut discriminator = [0u8; 8];
+    discriminator.copy_from_slice(&hash[..8]);
+    discriminator
+}
 
 /// Generates a single instruction handler.
 pub fn generate_ix_handler(ix: &IdlInstruction) -> TokenStream {
@@ -50,7 +95,7 @@ pub fn generate_glam_ix_structs(
     program_name: &Ident,
     ixs_to_generate: &[String],
     ix_code_gen_configs: &std::collections::HashMap<String, GlamIxCodeGenConfig>,
-) -> TokenStream {
+) -> (TokenStream, Vec<IxInfo>) {
     //  ixs_to_generate &&  ix_code_gen_configs: generate only the intersecting instructions
     // !ixs_to_generate && !ix_code_gen_configs: generate all instructions
     // !ixs_to_generate &&  ix_code_gen_configs: generate only the instructions specified in the config
@@ -58,6 +103,7 @@ pub fn generate_glam_ix_structs(
 
     // Multiple ixs might share the same accounts struct, so we need to keep track of which ones have been generated
     let mut accounts_structs_generated: Vec<String> = vec![];
+    let mut ix_infos: Vec<IxInfo> = vec![];
 
     let defs = ixs
         .iter()
@@ -85,18 +131,55 @@ pub fn generate_glam_ix_structs(
             };
 
             // Generate fields (with annotations) inside the accounts struct, for example;
-            let (_all_structs, all_fields) = crate::generate_glam_account_fields(
-                &ix.name.to_pascal_case(),
-                &ix.accounts,
-                ix_code_gen_configs.get(ix.name.as_str()),
+            let (_all_structs, all_fields, all_accounts, accounts_to_keep) =
+                crate::generate_glam_account_fields(
+                    &ix.name.to_pascal_case(),
+                    &ix.accounts,
+                    ix_code_gen_configs.get(ix.name.as_str()),
+                );
+
+            // Generate the remappings
+            let mut glam_account_infos: Vec<AccuntInfo> = vec![];
+            let mut index_map: Vec<i32> = vec![];
+            let src_ix_name = ix.name.to_snake_case();
+            let dst_ix_name = format!(
+                "{}_{}",
+                program_name.to_string().to_snake_case(),
+                ix.name.to_snake_case()
             );
+            let src_discriminator = compute_discriminator(&src_ix_name);
+            let dst_discriminator = compute_discriminator(&dst_ix_name);
+
+            let mut glam_ix_idx = 3;
+            for idx in 0..all_accounts.len() {
+                if !accounts_to_keep.contains(&all_accounts[idx]) {
+                    index_map.push(-1);
+                } else {
+                    glam_ix_idx += 1;
+                    index_map.push(glam_ix_idx);
+                }
+            }
 
             let glam_state_annotation = ix_code_gen_configs
                 .get(ix.name.as_str())
                 .map(|config| {
                     if config.mutable_state {
+                        glam_account_infos.push(AccuntInfo {
+                            name: "glam_state".to_string(),
+                            index: 0,
+                            writable: true,
+                            signer: false,
+                        });
+
                         quote! { #[account(mut)] }
                     } else {
+                        glam_account_infos.push(AccuntInfo {
+                            name: "glam_state".to_string(),
+                            index: 0,
+                            writable: false,
+                            signer: false,
+                        });
+
                         quote! {}
                     }
                 })
@@ -107,11 +190,32 @@ pub fn generate_glam_ix_structs(
             let glam_vault_annotation =
                 if let Some(config) = ix_code_gen_configs.get(ix.name.as_str()) {
                     if config.mutable_vault {
+                        glam_account_infos.push(AccuntInfo {
+                            name: "glam_vault".to_string(),
+                            index: 1,
+                            writable: true,
+                            signer: false,
+                        });
+
                         quote! { #[account(mut, seeds = #seeds, bump)] }
                     } else {
+                        glam_account_infos.push(AccuntInfo {
+                            name: "glam_vault".to_string(),
+                            index: 1,
+                            writable: false,
+                            signer: false,
+                        });
+
                         quote! { #[account(seeds = #seeds, bump)] }
                     }
                 } else {
+                    glam_account_infos.push(AccuntInfo {
+                        name: "glam_vault".to_string(),
+                        index: 1,
+                        writable: false,
+                        signer: false,
+                    });
+
                     quote! { #[account(seeds = #seeds, bump)] }
                 };
 
@@ -131,6 +235,30 @@ pub fn generate_glam_ix_structs(
                 pub cpi_program: Program<'info, #program_name>,
             });
 
+            glam_account_infos.push(AccuntInfo {
+                name: "glam_signer".to_string(),
+                index: 2,
+                writable: true,
+                signer: true,
+            });
+            glam_account_infos.push(AccuntInfo {
+                name: "cpi_program".to_string(),
+                index: 3,
+                writable: false,
+                signer: false,
+            });
+
+            // Create IxInfo
+            ix_infos.push(IxInfo {
+                src_ix_name,
+                src_discriminator,
+                dst_ix_name,
+                dst_discriminator,
+                dynamic_accounts: glam_account_infos,
+                static_accounts: Vec::new(),
+                index_map,
+            });
+
             quote! {
                 #[derive(Accounts)]
                 pub struct #accounts_struct_name<'info> {
@@ -140,9 +268,8 @@ pub fn generate_glam_ix_structs(
                 }
             }
         });
-    quote! {
-        #(#defs)*
-    }
+
+    (quote! { #(#defs)* }, ix_infos)
 }
 
 pub fn generate_ix_structs(ixs: &[IdlInstruction]) -> TokenStream {
