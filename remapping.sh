@@ -62,3 +62,20 @@ $REMAPPING_GEN $MARINADE_IDL --idl-name-alias marinade \
     --ixs orderUnstake \
     --ixs depositStakeAccount \
     --output $MARINADE_OUT
+
+#
+# METEORA DLMM
+#
+MET_DLMM_IDL=$(realpath ../glam/anchor/deps/meteora_dlmm/lb_clmm.json)
+MET_DLMM_OUT=../glam/anchor/programs/glam/src/cpi_autogen/remapping/meteora_dlmm.json
+
+$REMAPPING_GEN $MET_DLMM_IDL --idl-name-alias meteora_dlmm \
+    --program-id LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo \
+    --ixs initializePosition \
+    --ixs addLiquidityByStrategy \
+    --ixs removeLiquidityByRange \
+    --ixs claimFee \
+    --ixs closePosition \
+    --ixs swap \
+    --output $MET_DLMM_OUT
+
