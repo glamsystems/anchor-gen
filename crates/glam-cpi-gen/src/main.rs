@@ -85,6 +85,7 @@ enum Commands {
 }
 
 fn prettify(tokens: TokenStream) -> String {
+    // println!("tokens: {}", tokens);
     let syntax_tree: File = parse2(tokens).expect("Failed to parse TokenStream");
     let pretty_code = unparse(&syntax_tree);
 

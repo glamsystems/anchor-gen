@@ -32,7 +32,7 @@ pub fn generate_account_fields(
                 }
             }
             anchor_syn::idl::IdlAccountItem::IdlAccounts(inner) => {
-                let field_name = format_ident!("{}{}", name, inner.name.to_snake_case());
+                let field_name = format_ident!("{}_{}", name, inner.name.to_snake_case());
                 let sub_name = format!("{}{}", name, inner.name.to_pascal_case());
                 let sub_ident = format_ident!("{}", &sub_name);
                 let (sub_structs, sub_fields) = generate_account_fields(&sub_name, &inner.accounts);
@@ -63,13 +63,16 @@ pub fn generate_glam_account_fields(
     name: &str,
     accounts: &[IdlAccountItem],
     ix_code_gen_config: Option<&GlamIxCodeGenConfig>,
-) -> (TokenStream, TokenStream, Vec<String>, Vec<String>) {
+    vec_accounts_ts: &mut Vec<TokenStream>,
+    accounts_to_keep: &mut Vec<String>,
+    all_accounts: &mut Vec<String>,
+    map_sub_accounts: &mut std::collections::HashMap<String, Vec<String>>,
+    sub_accounts_struct_name: String,
+) -> (TokenStream, TokenStream) {
     let vault_aliases =
         ix_code_gen_config.map_or(Vec::new(), |c| c.vault_aliases.clone().unwrap_or_default());
 
     let mut all_structs: Vec<TokenStream> = vec![];
-    let mut accounts_to_keep: Vec<String> = vec![]; // accounts to keep in the glam proxy ix
-    let mut all_accounts: Vec<String> = vec![]; // all accounts used by the orignal ix
 
     let all_fields = accounts
         .iter()
@@ -101,8 +104,17 @@ pub fn generate_glam_account_fields(
                 };
 
                 let acc_name = format_ident!("{}", info.name.to_snake_case());
+
                 // result
                 all_accounts.push(info.name.to_snake_case());
+                if let Some(sub) = map_sub_accounts.get_mut(&sub_accounts_struct_name) {
+                    sub.push(info.name.to_snake_case());
+                } else {
+                    map_sub_accounts.insert(
+                        sub_accounts_struct_name.clone(),
+                        vec![info.name.to_snake_case()],
+                    );
+                }
                 if vault_aliases.contains(&info.name.to_snake_case()) {
                     None
                 } else {
@@ -115,11 +127,20 @@ pub fn generate_glam_account_fields(
                 }
             }
             anchor_syn::idl::IdlAccountItem::IdlAccounts(inner) => {
-                let field_name = format_ident!("{}{}", name, inner.name.to_snake_case());
+                let field_name = format_ident!("{}_{}", name, inner.name.to_snake_case());
                 let sub_name = format!("{}{}", name, inner.name.to_pascal_case());
                 let sub_ident = format_ident!("{}", &sub_name);
-                let (sub_structs, sub_fields, _all_accounts, _accounts_to_keep) =
-                    generate_glam_account_fields(&sub_name, &inner.accounts, ix_code_gen_config);
+
+                let (sub_structs, sub_fields) = generate_glam_account_fields(
+                    &sub_name,
+                    &inner.accounts,
+                    ix_code_gen_config,
+                    vec_accounts_ts,
+                    accounts_to_keep,
+                    all_accounts,
+                    map_sub_accounts,
+                    field_name.to_string(),
+                );
                 all_structs.push(sub_structs);
                 all_structs.push(quote! {
                     #[derive(Accounts)]
@@ -127,14 +148,19 @@ pub fn generate_glam_account_fields(
                         #sub_fields
                     }
                 });
-                Some(quote! {
-                    pub #field_name: #sub_ident<'info>
-                })
+                // All sub accounts will be flattened in the parent struct, we don't need to add the sub struct
+                // Some(quote! {
+                //     pub #field_name: #sub_ident<'info>
+                // })
+                None
             }
         })
         .filter(|x| x.is_some())
         .map(|x| x.unwrap())
         .collect::<Vec<_>>();
+
+    vec_accounts_ts.extend(all_fields.clone());
+
     (
         quote! {
             #(#all_structs)*
@@ -142,7 +168,5 @@ pub fn generate_glam_account_fields(
         quote! {
             #(#all_fields),*
         },
-        all_accounts,
-        accounts_to_keep,
     )
 }

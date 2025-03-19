@@ -23,7 +23,10 @@ pub struct GlamIxCodeGenConfig {
     pub integration: Option<String>,
     pub remove_signer: Option<Vec<String>>, // TODO: not being used, consider removing
     pub vault_aliases: Option<Vec<String>>,
-    pub accounts_struct: Option<String>, // by default accounts struct name is `<ProgramName><IxName>`, this overwrites it with `<ProgramName><AccountsStruct>`
+    // by default accounts struct name is `<ProgramName><IxName>`,
+    // this overwrites it with `<ProgramName><AccountsStruct>`,
+    // useful when multiple ixs share the same accounts struct
+    pub accounts_struct: Option<String>,
     pub with_remaining_accounts: bool,
     pub signed_by_vault: bool,
     pub mutable_vault: bool,
@@ -129,7 +132,7 @@ impl Generator {
         let program_name_snake_case = format_ident!("{}", idl_name.to_snake_case());
         let idl_name_pascal_case = format_ident!("{}", idl.name.to_pascal_case()); // program name from idl.json
 
-        let (ix_structs, ix_infos) = generate_glam_ix_structs(
+        let (ix_structs, ix_infos, ixs_sub_accounts) = generate_glam_ix_structs(
             &idl.instructions,
             &program_name_pascal_case,
             ixs,
@@ -148,6 +151,7 @@ impl Generator {
             &program_name_pascal_case,
             ixs,
             &self.ix_code_gen_configs,
+            &ixs_sub_accounts,
         );
 
         let imports = if skip_imports {
@@ -169,6 +173,7 @@ impl Generator {
 
                 #program_import
 
+                #[allow(unused)]
                 use #program_name_snake_case::typedefs::*;
             }
         };
@@ -186,13 +191,14 @@ impl Generator {
         let ix_structs = generate_ix_structs(&idl.instructions);
 
         let docs = format!(
-        " Anchor CPI crate generated from {} v{} using [anchor-gen](https://crates.io/crates/anchor-gen) v{}.",
-        &idl.name,
-        &idl.version,
-        &GEN_VERSION.unwrap_or("unknown")
-    );
+            " Anchor CPI crate generated from {} v{} using [anchor-gen](https://crates.io/crates/anchor-gen) v{}.",
+            &idl.name,
+            &idl.version,
+            &GEN_VERSION.unwrap_or("unknown")
+        );
 
         quote! {
+
             use anchor_lang::prelude::*;
 
             pub mod typedefs {
@@ -207,6 +213,7 @@ impl Generator {
                 #accounts
             }
 
+            #[allow(non_snake_case)]
             pub mod ix_accounts {
                 //! Accounts used in instructions.
                 use super::*;

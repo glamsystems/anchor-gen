@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CPI_GEN="cargo run -q -p glam-cpi-gen glam --config ./config.yaml"
+CPI_GEN="cargo run  -p glam-cpi-gen glam --config ./config.yaml"
 
 # Define test cases
 # Each test case consists of:
