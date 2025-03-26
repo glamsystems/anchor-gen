@@ -60,6 +60,19 @@
         8,
         9
       ]
+    },
+    {
+      "src_ix_name": "log_user_balances",
+      "src_discriminator": [
+        162,
+        21,
+        35,
+        251,
+        32,
+        57,
+        161,
+        210
+      ]
     }
   ]
 }

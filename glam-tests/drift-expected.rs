@@ -4,6 +4,7 @@ use crate::state::{
 };
 use anchor_lang::prelude::*;
 pub use drift::program::Drift;
+#[allow(unused)]
 use drift::typedefs::*;
 #[derive(Accounts)]
 pub struct DriftInitializeUser<'info> {

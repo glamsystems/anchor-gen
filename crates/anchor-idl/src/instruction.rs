@@ -23,11 +23,16 @@ pub struct AccuntInfo {
 pub struct IxInfo {
     src_ix_name: String,
     src_discriminator: [u8; 8],
-    dst_ix_name: String,
-    dst_discriminator: [u8; 8],
-    dynamic_accounts: Vec<AccuntInfo>,
-    static_accounts: Vec<AccuntInfo>,
-    index_map: Vec<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dst_ix_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dst_discriminator: Option<[u8; 8]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dynamic_accounts: Option<Vec<AccuntInfo>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    static_accounts: Option<Vec<AccuntInfo>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    index_map: Option<Vec<i32>>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -273,15 +278,31 @@ pub fn generate_glam_ix_structs(
             });
 
             // Create IxInfo
-            ix_infos.push(IxInfo {
-                src_ix_name,
-                src_discriminator,
-                dst_ix_name,
-                dst_discriminator,
-                dynamic_accounts: glam_account_infos,
-                static_accounts: Vec::new(),
-                index_map,
-            });
+            // If ix is listed in input but not configured, it means we don't need to proxy it and
+            // we don't need to generate remapping data
+            if ixs_to_generate.contains(&ix.name.to_string())
+                && ix_code_gen_configs.get(ix.name.as_str()).is_none()
+            {
+                ix_infos.push(IxInfo {
+                    src_ix_name,
+                    src_discriminator,
+                    dst_ix_name: None,
+                    dst_discriminator: None,
+                    dynamic_accounts: None,
+                    static_accounts: None,
+                    index_map: None,
+                });
+            } else {
+                ix_infos.push(IxInfo {
+                    src_ix_name,
+                    src_discriminator,
+                    dst_ix_name: Some(dst_ix_name),
+                    dst_discriminator: Some(dst_discriminator),
+                    dynamic_accounts: Some(glam_account_infos),
+                    static_accounts: Some(Vec::new()),
+                    index_map: Some(index_map),
+                });
+            }
 
             quote! {
                 #[derive(Accounts)]
