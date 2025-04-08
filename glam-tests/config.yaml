@@ -9,6 +9,8 @@ drift:
     integration: Drift
     vault_aliases: ["authority"]
     signed_by_vault: true
+    pre_cpi: pre_cpi_fn
+    mutable_state: true
   - ix_name: deleteUser
     permission: DriftDeleteUser
     integration: Drift

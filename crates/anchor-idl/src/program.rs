@@ -31,6 +31,7 @@ pub struct GlamIxCodeGenConfig {
     pub signed_by_vault: bool,
     pub mutable_vault: bool,
     pub mutable_state: bool,
+    pub pre_cpi: Option<String>,
 }
 
 #[derive(Default, FromMeta)]

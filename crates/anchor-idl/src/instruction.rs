@@ -396,6 +396,19 @@ pub fn generate_glam_ix_handler(
         })
         .collect::<Vec<_>>();
 
+    let mutable_state = ix_code_gen_config.mutable_state;
+    let ctx_arg = if mutable_state {
+        quote! { mut ctx }
+    } else {
+        quote! { ctx }
+    };
+    let pre_cpi = if let Some(pre_cpi) = ix_code_gen_config.pre_cpi.clone() {
+        let func = format_ident!("{}", pre_cpi);
+        quote! { crate::utils::pre_cpi::#func(&#ctx_arg, #(#cpi_ix_args),*)?; }
+    } else {
+        quote! {}
+    };
+
     let vault_aliases = ix_code_gen_config.vault_aliases.clone().unwrap_or_default();
 
     let root_account_infos = map_sub_accounts
@@ -488,9 +501,11 @@ pub fn generate_glam_ix_handler(
             #access_control_integration
             #[glam_macros::glam_vault_signer_seeds]
             pub fn #glam_ix_name #lt0(
-                ctx: Context<#lt1 #glam_ix_accounts_name #lt2>,
+                #ctx_arg: Context<#lt1 #glam_ix_accounts_name #lt2>,
                 #(#args),*
             ) -> Result<()> {
+                #pre_cpi
+
                 #program_name_snake_case::cpi::#cpi_ix_name(CpiContext::new_with_signer(
                     ctx.accounts.cpi_program.to_account_info(),
                     #program_name_snake_case::cpi::accounts::#cpi_ix_accounts_name {
@@ -506,9 +521,11 @@ pub fn generate_glam_ix_handler(
             #access_control_permission
             #access_control_integration
             pub fn #glam_ix_name(
-                ctx: Context<#glam_ix_accounts_name>,
+                #ctx_arg: Context<#glam_ix_accounts_name>,
                 #(#args),*
             ) -> Result<()> {
+                #pre_cpi
+
                 #program_name_snake_case::cpi::#cpi_ix_name(CpiContext::new(
                     ctx.accounts.cpi_program.to_account_info(),
                     #program_name_snake_case::cpi::accounts::#cpi_ix_accounts_name {
