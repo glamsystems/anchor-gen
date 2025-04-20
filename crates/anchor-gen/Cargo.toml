@@ -16,8 +16,9 @@ path = "src/lib.rs"
 [features]
 compat-program-result = [
   "anchor-generate-cpi-crate/compat-program-result",
-  "anchor-generate-cpi-interface/compat-program-result"
+  "anchor-generate-cpi-interface/compat-program-result",
 ]
+glam = ["anchor-generate-cpi-crate/glam"]
 
 [dependencies]
 anchor-generate-cpi-crate = { version = "0.3.0", path = "../anchor-generate-cpi-crate" }

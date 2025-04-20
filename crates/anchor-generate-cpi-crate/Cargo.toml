@@ -16,6 +16,7 @@ proc-macro = true
 
 [features]
 compat-program-result = ["anchor-idl/compat-program-result"]
+glam = ["anchor-idl/glam"]
 
 [dependencies]
 anchor-idl = { version = "0.3.0", path = "../anchor-idl" }

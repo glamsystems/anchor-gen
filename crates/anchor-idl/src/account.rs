@@ -1,4 +1,4 @@
-pub use anchor_syn::idl::*;
+use anchor_syn::idl::types::IdlAccountItem;
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -14,24 +14,29 @@ pub fn generate_account_fields(
     let all_fields = accounts
         .iter()
         .map(|account| match account {
-            anchor_syn::idl::IdlAccountItem::IdlAccount(info) => {
+            anchor_syn::idl::types::IdlAccountItem::IdlAccount(info) => {
                 let acc_name = format_ident!("{}", info.name.to_snake_case());
                 let annotation = if info.is_mut {
                     quote! { #[account(mut)] }
                 } else {
                     quote! {}
                 };
-                let ty = if info.is_signer {
+                let acc_type = if info.is_signer {
                     quote! { Signer<'info> }
                 } else {
                     quote! { AccountInfo<'info> }
                 };
+                let acc_type = if info.is_optional.is_some() {
+                    quote! { Option<#acc_type> }
+                } else {
+                    acc_type
+                };
                 quote! {
                    #annotation
-                   pub #acc_name: #ty
+                   pub #acc_name: #acc_type
                 }
             }
-            anchor_syn::idl::IdlAccountItem::IdlAccounts(inner) => {
+            anchor_syn::idl::types::IdlAccountItem::IdlAccounts(inner) => {
                 let field_name = format_ident!("{}_{}", name, inner.name.to_snake_case());
                 let sub_name = format!("{}{}", name, inner.name.to_pascal_case());
                 let sub_ident = format_ident!("{}", &sub_name);
@@ -66,7 +71,7 @@ pub fn generate_glam_account_fields(
     vec_accounts_ts: &mut Vec<TokenStream>,
     accounts_to_keep: &mut Vec<String>,
     all_accounts: &mut Vec<String>,
-    map_sub_accounts: &mut std::collections::HashMap<String, Vec<String>>,
+    map_sub_accounts: &mut std::collections::HashMap<String, Vec<(String, bool)>>,
     sub_accounts_struct_name: String,
 ) -> (TokenStream, TokenStream) {
     let vault_aliases =
@@ -77,7 +82,7 @@ pub fn generate_glam_account_fields(
     let all_fields = accounts
         .iter()
         .map(|account| match account {
-            anchor_syn::idl::IdlAccountItem::IdlAccount(info) => {
+            anchor_syn::idl::types::IdlAccountItem::IdlAccount(info) => {
                 // account annotation
                 let mut annotation = if info.is_mut {
                     quote! { #[account(mut)] }
@@ -87,7 +92,7 @@ pub fn generate_glam_account_fields(
 
                 // type and lifetime
                 // always remove signer if it's a vault alias
-                let ty = if info.is_signer {
+                let acc_type = if info.is_signer {
                     quote! { Signer<'info> }
                 } else if info.name.to_snake_case().eq("system_program") {
                     quote! { Program<'info, System> }
@@ -103,16 +108,23 @@ pub fn generate_glam_account_fields(
                     quote! { AccountInfo<'info> }
                 };
 
+                let acc_type = if info.is_optional.is_some() {
+                    quote! { Option<#acc_type> }
+                } else {
+                    acc_type
+                };
+
                 let acc_name = format_ident!("{}", info.name.to_snake_case());
 
                 // result
+                let is_optional = info.is_optional.unwrap_or(false);
                 all_accounts.push(info.name.to_snake_case());
                 if let Some(sub) = map_sub_accounts.get_mut(&sub_accounts_struct_name) {
-                    sub.push(info.name.to_snake_case());
+                    sub.push((info.name.to_snake_case(), is_optional));
                 } else {
                     map_sub_accounts.insert(
                         sub_accounts_struct_name.clone(),
-                        vec![info.name.to_snake_case()],
+                        vec![(info.name.to_snake_case(), is_optional)],
                     );
                 }
                 if vault_aliases.contains(&info.name.to_snake_case()) {
@@ -122,11 +134,11 @@ pub fn generate_glam_account_fields(
 
                     Some(quote! {
                        #annotation
-                       pub #acc_name: #ty
+                       pub #acc_name: #acc_type
                     })
                 }
             }
-            anchor_syn::idl::IdlAccountItem::IdlAccounts(inner) => {
+            anchor_syn::idl::types::IdlAccountItem::IdlAccounts(inner) => {
                 let field_name = format_ident!("{}_{}", name, inner.name.to_snake_case());
                 let sub_name = format!("{}{}", name, inner.name.to_pascal_case());
                 let sub_ident = format_ident!("{}", &sub_name);

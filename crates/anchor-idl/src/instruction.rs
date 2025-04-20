@@ -1,4 +1,4 @@
-use anchor_syn::idl::IdlInstruction;
+use anchor_syn::idl::types::IdlInstruction;
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -104,7 +104,7 @@ pub fn generate_glam_ix_structs(
 ) -> (
     TokenStream,
     Vec<IxInfo>,
-    HashMap<String, HashMap<String, Vec<String>>>,
+    HashMap<String, HashMap<String, Vec<(String, bool)>>>,
 ) {
     //  ixs_to_generate &&  ix_code_gen_configs: generate only the intersecting instructions
     // !ixs_to_generate && !ix_code_gen_configs: generate all instructions
@@ -115,7 +115,8 @@ pub fn generate_glam_ix_structs(
     let mut accounts_structs_generated: Vec<String> = vec![];
     let mut ix_infos: Vec<IxInfo> = vec![];
 
-    let mut ixs_sub_accounts: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+    let mut ixs_sub_accounts: HashMap<String, HashMap<String, Vec<(String, bool)>>> =
+        HashMap::new();
 
     let defs = ixs
         .iter()
@@ -135,7 +136,7 @@ pub fn generate_glam_ix_structs(
 
             // Generate fields (with annotations) inside the accounts struct recursively (sub accounts may exist)
             // Map from sub accounts struct name to the list of account names
-            let mut map_sub_accounts: HashMap<String, Vec<String>> = HashMap::new();
+            let mut map_sub_accounts: HashMap<String, Vec<(String, bool)>> = HashMap::new();
             let mut accounts_to_keep: Vec<String> = Vec::new();
             let mut all_accounts: Vec<String> = Vec::new();
             let mut vec_accounts_ts: Vec<TokenStream> = Vec::new();
@@ -351,7 +352,7 @@ pub fn generate_glam_ix_handler(
     ix: &IdlInstruction,
     program_name: &Ident,
     ix_code_gen_config: &GlamIxCodeGenConfig,
-    map_sub_accounts: &HashMap<String, Vec<String>>,
+    map_sub_accounts: &HashMap<String, Vec<(String, bool)>>,
 ) -> TokenStream {
     let program_name_snake_case = format_ident!("{}", program_name.to_string().to_snake_case());
     let program_name_pascal_case = format_ident!("{}", program_name.to_string().to_pascal_case());
@@ -417,15 +418,27 @@ pub fn generate_glam_ix_handler(
         .map(|(_, v)| {
             let account_infos = v
                 .iter()
-                .map(|account| {
+                .map(|(account, is_optional)| {
                     let name = format_ident!("{}", account.to_snake_case());
                     if vault_aliases.contains(&account.to_snake_case()) {
-                        quote! {
-                            #name: ctx.accounts.glam_vault.to_account_info()
+                        if *is_optional {
+                            quote! {
+                                #name: Some(ctx.accounts.glam_vault.to_account_info())
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.glam_vault.to_account_info()
+                            }
                         }
                     } else {
-                        quote! {
-                            #name: ctx.accounts.#name.to_account_info()
+                        if *is_optional {
+                            quote! {
+                                #name: ctx.accounts.#name.clone()
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.#name.to_account_info()
+                            }
                         }
                     }
                 })
@@ -437,21 +450,33 @@ pub fn generate_glam_ix_handler(
         })
         .collect::<Vec<_>>();
 
-    let sub_account_infos = map_sub_accounts
+    let mut sub_account_infos = map_sub_accounts
         .iter()
         .filter(|(k, _)| k.as_str() != "root")
         .map(|(k, v)| {
             let sub_account_infos = v
                 .iter()
-                .map(|account| {
+                .map(|(account, is_optional)| {
                     let name = format_ident!("{}", account.to_snake_case());
                     if vault_aliases.contains(&account.to_snake_case()) {
-                        quote! {
-                            #name: ctx.accounts.glam_vault.to_account_info()
+                        if *is_optional {
+                            quote! {
+                                #name: Some(ctx.accounts.glam_vault.to_account_info())
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.glam_vault.to_account_info()
+                            }
                         }
                     } else {
-                        quote! {
-                            #name: ctx.accounts.#name.to_account_info()
+                        if *is_optional {
+                            quote! {
+                                #name: ctx.accounts.#name.clone()
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.#name.to_account_info()
+                            }
                         }
                     }
                 })
@@ -465,6 +490,9 @@ pub fn generate_glam_ix_handler(
             }
         })
         .collect::<Vec<_>>();
+
+    // sort sub_account_infos so that generated code is deterministic
+    sub_account_infos.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
 
     let access_control_permission = if let Some(permission) = &ix_code_gen_config.permission {
         let permission = format_ident!("{}", permission);
@@ -543,7 +571,7 @@ pub fn generate_glam_ix_handlers(
     program_name: &Ident,
     ixs_to_generate: &[String],
     ix_code_gen_configs: &HashMap<String, GlamIxCodeGenConfig>,
-    ixs_sub_accounts: &HashMap<String, HashMap<String, Vec<String>>>,
+    ixs_sub_accounts: &HashMap<String, HashMap<String, Vec<(String, bool)>>>,
 ) -> TokenStream {
     let streams = ixs
         .iter()

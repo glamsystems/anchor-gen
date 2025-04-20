@@ -1,5 +1,6 @@
 //! Generates Rust code from an Anchor IDL.
 
+use anchor_syn::idl::types::IdlType;
 pub use anchor_syn::idl::*;
 
 mod account;
@@ -40,5 +41,6 @@ pub fn ty_to_rust_type(ty: &IdlType) -> String {
         IdlType::Vec(inner) => format!("Vec<{}>", ty_to_rust_type(inner)),
         IdlType::Array(ty, size) => format!("[{}; {}]", ty_to_rust_type(ty), size),
         IdlType::Defined(name) => name.to_string(),
+        _ => todo!(),
     }
 }
