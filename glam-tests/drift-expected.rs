@@ -4,9 +4,11 @@ use crate::state::{
 };
 use anchor_lang::prelude::*;
 pub use drift::program::Drift;
+#[allow(unused)]
 use drift::typedefs::*;
 #[derive(Accounts)]
 pub struct DriftInitializeUser<'info> {
+    #[account(mut)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -201,10 +203,11 @@ pub struct DriftDeleteUser<'info> {
 #[access_control(acl::check_integration(&ctx.accounts.glam_state, Integration::Drift))]
 #[glam_macros::glam_vault_signer_seeds]
 pub fn drift_initialize_user(
-    ctx: Context<DriftInitializeUser>,
+    mut ctx: Context<DriftInitializeUser>,
     sub_account_id: u16,
     name: [u8; 32],
 ) -> Result<()> {
+    crate::utils::pre_cpi::pre_cpi_fn(&mut ctx, sub_account_id, name)?;
     drift::cpi::initialize_user(
         CpiContext::new_with_signer(
             ctx.accounts.cpi_program.to_account_info(),

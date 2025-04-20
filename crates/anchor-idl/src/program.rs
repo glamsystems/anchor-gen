@@ -1,8 +1,7 @@
 use heck::{ToPascalCase, ToSnakeCase};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    env, fs,
-    path::PathBuf,
+    fs,
 };
 
 use darling::{util::PathList, FromMeta};
@@ -13,7 +12,7 @@ use serde_yaml;
 
 use crate::{
     generate_accounts, generate_glam_ix_handlers, generate_glam_ix_structs, generate_ix_handlers,
-    generate_ix_structs, generate_typedefs, GEN_VERSION,
+    generate_ix_structs, generate_typedefs, GlamIxRemapping, GEN_VERSION,
 };
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -24,11 +23,15 @@ pub struct GlamIxCodeGenConfig {
     pub integration: Option<String>,
     pub remove_signer: Option<Vec<String>>, // TODO: not being used, consider removing
     pub vault_aliases: Option<Vec<String>>,
-    pub accounts_struct: Option<String>, // by default accounts struct name is `<ProgramName><IxName>`, this overwrites it with `<ProgramName><AccountsStruct>`
+    // by default accounts struct name is `<ProgramName><IxName>`,
+    // this overwrites it with `<ProgramName><AccountsStruct>`,
+    // useful when multiple ixs share the same accounts struct
+    pub accounts_struct: Option<String>,
     pub with_remaining_accounts: bool,
     pub signed_by_vault: bool,
     pub mutable_vault: bool,
     pub mutable_state: bool,
+    pub pre_cpi: Option<String>,
 }
 
 #[derive(Default, FromMeta)]
@@ -56,9 +59,9 @@ fn path_list_to_string(list: Option<&PathList>) -> HashSet<String> {
 
 impl GeneratorOptions {
     pub fn to_generator(&self) -> Generator {
-        let cargo_manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-        let path = PathBuf::from(cargo_manifest_dir).join(&self.idl_path);
-        let idl_contents = fs::read_to_string(&path).unwrap();
+        // let cargo_manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        // let path = PathBuf::from(cargo_manifest_dir).join(&self.idl_path);
+        let idl_contents = fs::read_to_string(&self.idl_path).unwrap();
         let idl: anchor_syn::idl::Idl = serde_json::from_str(&idl_contents).unwrap();
 
         let zero_copy = path_list_to_string(self.zero_copy.as_ref());
@@ -122,25 +125,34 @@ impl Generator {
         &self,
         ixs: &[String],
         skip_imports: bool,
-        idl_name: Option<String>,
-    ) -> TokenStream {
+        idl_name_override: Option<String>,
+    ) -> (TokenStream, GlamIxRemapping) {
         let idl = &self.idl;
-        let idl_name = idl_name.unwrap_or(idl.name.clone());
+        let idl_name = idl_name_override.unwrap_or(idl.name.clone()); // program name from config.yaml
         let program_name_pascal_case = format_ident!("{}", idl_name.to_pascal_case());
         let program_name_snake_case = format_ident!("{}", idl_name.to_snake_case());
-        let idl_name_pascal_case = format_ident!("{}", idl.name.to_pascal_case());
+        let idl_name_pascal_case = format_ident!("{}", idl.name.to_pascal_case()); // program name from idl.json
 
-        let ix_structs = generate_glam_ix_structs(
+        let (ix_structs, ix_infos, ixs_sub_accounts) = generate_glam_ix_structs(
             &idl.instructions,
             &program_name_pascal_case,
             ixs,
             &self.ix_code_gen_configs,
         );
+
+        let remapping = GlamIxRemapping {
+            program_id: "".to_string(),
+            instructions: ix_infos,
+        };
+        // print remapping as json
+        // println!("{}", serde_json::to_string_pretty(&remapping).unwrap());
+
         let ix_handlers = generate_glam_ix_handlers(
             &idl.instructions,
             &program_name_pascal_case,
             ixs,
             &self.ix_code_gen_configs,
+            &ixs_sub_accounts,
         );
 
         let imports = if skip_imports {
@@ -148,11 +160,11 @@ impl Generator {
         } else {
             let program_import = if program_name_pascal_case == idl_name_pascal_case {
                 quote! {
-                    pub use #program_name_snake_case::program::#program_name_pascal_case;
+                    pub use #program_name_snake_case::program::#idl_name_pascal_case;
                 }
             } else {
                 quote! {
-                pub use #program_name_snake_case::program::#idl_name_pascal_case as #program_name_pascal_case;
+                    pub use #program_name_snake_case::program::#idl_name_pascal_case as #program_name_pascal_case;
                 }
             };
 
@@ -162,17 +174,12 @@ impl Generator {
 
                 #program_import
 
+                #[allow(unused)]
                 use #program_name_snake_case::typedefs::*;
             }
         };
 
-        quote! {
-            #imports
-
-            #ix_structs
-
-            #ix_handlers
-        }
+        (quote! { #imports #ix_structs #ix_handlers }, remapping)
     }
 
     pub fn generate_cpi_interface(&self) -> TokenStream {
@@ -185,13 +192,14 @@ impl Generator {
         let ix_structs = generate_ix_structs(&idl.instructions);
 
         let docs = format!(
-        " Anchor CPI crate generated from {} v{} using [anchor-gen](https://crates.io/crates/anchor-gen) v{}.",
-        &idl.name,
-        &idl.version,
-        &GEN_VERSION.unwrap_or("unknown")
-    );
+            " Anchor CPI crate generated from {} v{} using [anchor-gen](https://crates.io/crates/anchor-gen) v{}.",
+            &idl.name,
+            &idl.version,
+            &GEN_VERSION.unwrap_or("unknown")
+        );
 
         quote! {
+
             use anchor_lang::prelude::*;
 
             pub mod typedefs {
@@ -206,6 +214,7 @@ impl Generator {
                 #accounts
             }
 
+            #[allow(non_snake_case)]
             pub mod ix_accounts {
                 //! Accounts used in instructions.
                 use super::*;

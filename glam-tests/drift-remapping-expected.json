@@ -1,0 +1,78 @@
+{
+  "program_id": "dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH",
+  "instructions": [
+    {
+      "src_ix_name": "initialize_user",
+      "src_discriminator": [
+        111,
+        17,
+        185,
+        250,
+        60,
+        122,
+        38,
+        254
+      ],
+      "dst_ix_name": "drift_initialize_user",
+      "dst_discriminator": [
+        107,
+        244,
+        158,
+        15,
+        225,
+        239,
+        98,
+        245
+      ],
+      "dynamic_accounts": [
+        {
+          "name": "glam_state",
+          "index": 0,
+          "writable": false,
+          "signer": false
+        },
+        {
+          "name": "glam_vault",
+          "index": 1,
+          "writable": false,
+          "signer": false
+        },
+        {
+          "name": "glam_signer",
+          "index": 2,
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "cpi_program",
+          "index": 3,
+          "writable": false,
+          "signer": false
+        }
+      ],
+      "static_accounts": [],
+      "index_map": [
+        4,
+        5,
+        6,
+        -1,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "src_ix_name": "log_user_balances",
+      "src_discriminator": [
+        162,
+        21,
+        35,
+        251,
+        32,
+        57,
+        161,
+        210
+      ]
+    }
+  ]
+}
