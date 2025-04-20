@@ -1,4 +1,4 @@
-use anchor_syn::idl::IdlInstruction;
+use anchor_syn::idl::types::IdlInstruction;
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -437,7 +437,7 @@ pub fn generate_glam_ix_handler(
         })
         .collect::<Vec<_>>();
 
-    let sub_account_infos = map_sub_accounts
+    let mut sub_account_infos = map_sub_accounts
         .iter()
         .filter(|(k, _)| k.as_str() != "root")
         .map(|(k, v)| {
@@ -465,6 +465,9 @@ pub fn generate_glam_ix_handler(
             }
         })
         .collect::<Vec<_>>();
+
+    // sort sub_account_infos so that generated code is deterministic
+    sub_account_infos.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
 
     let access_control_permission = if let Some(permission) = &ix_code_gen_config.permission {
         let permission = format_ident!("{}", permission);
