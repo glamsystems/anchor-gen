@@ -1,6 +1,9 @@
-use crate::state::{
-    acl::{self, *},
-    StateAccount,
+use crate::{
+    state::{
+        acl::{self, *},
+        StateAccount,
+    },
+    error::GlamError,
 };
 use anchor_lang::prelude::*;
 pub use drift::program::Drift;
@@ -8,7 +11,7 @@ pub use drift::program::Drift;
 use drift::typedefs::*;
 #[derive(Accounts)]
 pub struct DriftInitializeUser<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -35,6 +38,7 @@ pub struct DriftInitializeUser<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftInitializeUserStats<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -58,6 +62,7 @@ pub struct DriftInitializeUserStats<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftDeposit<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         mut,
@@ -88,6 +93,7 @@ pub struct DriftDeposit<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftWithdraw<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         mut,
@@ -120,6 +126,7 @@ pub struct DriftWithdraw<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftCancelOrders<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -138,6 +145,7 @@ pub struct DriftCancelOrders<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftModifyOrder<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -155,7 +163,28 @@ pub struct DriftModifyOrder<'info> {
     pub user: AccountInfo<'info>,
 }
 #[derive(Accounts)]
+pub struct DriftPlaceOrders<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
+    pub glam_state: Box<Account<'info, StateAccount>>,
+    #[account(
+        mut,
+        seeds = [crate::constants::SEED_VAULT.as_bytes(),
+        glam_state.key().as_ref()],
+        bump
+    )]
+    pub glam_vault: SystemAccount<'info>,
+    #[account(mut)]
+    pub glam_signer: Signer<'info>,
+    pub cpi_program: Program<'info, Drift>,
+    /// CHECK: should be validated by target program
+    pub state: AccountInfo<'info>,
+    /// CHECK: should be validated by target program
+    #[account(mut)]
+    pub user: AccountInfo<'info>,
+}
+#[derive(Accounts)]
 pub struct DriftUpdateUser<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         seeds = [crate::constants::SEED_VAULT.as_bytes(),
@@ -172,6 +201,7 @@ pub struct DriftUpdateUser<'info> {
 }
 #[derive(Accounts)]
 pub struct DriftDeleteUser<'info> {
+    #[account(constraint = glam_state.enabled@GlamError::GlamStateDisabled)]
     pub glam_state: Box<Account<'info, StateAccount>>,
     #[account(
         mut,
@@ -414,6 +444,34 @@ pub fn drift_modify_order(
         ),
         order_id,
         modify_order_params,
+    )
+}
+#[access_control(
+    acl::check_access(
+        &ctx.accounts.glam_state,
+        &ctx.accounts.glam_signer.key,
+        Permission::DriftPlaceOrders
+    )
+)]
+#[access_control(acl::check_integration(&ctx.accounts.glam_state, Integration::Drift))]
+#[glam_macros::glam_vault_signer_seeds]
+pub fn drift_place_orders<'c: 'info, 'info>(
+    ctx: Context<'_, '_, 'c, 'info, DriftPlaceOrders<'info>>,
+    params: Vec<OrderParams>,
+) -> Result<()> {
+    crate::utils::pre_cpi::pre_cpi_drift_place_orders(&ctx, &params)?;
+    drift::cpi::place_orders(
+        CpiContext::new_with_signer(
+                ctx.accounts.cpi_program.to_account_info(),
+                drift::cpi::accounts::PlaceOrders {
+                    state: ctx.accounts.state.to_account_info(),
+                    user: ctx.accounts.user.to_account_info(),
+                    authority: ctx.accounts.glam_vault.to_account_info(),
+                },
+                glam_vault_signer_seeds,
+            )
+            .with_remaining_accounts(ctx.remaining_accounts.to_vec()),
+        params,
     )
 }
 #[access_control(

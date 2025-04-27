@@ -1,4 +1,4 @@
-use anchor_syn::idl::types::IdlInstruction;
+use anchor_syn::idl::types::{IdlInstruction, IdlType};
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -201,7 +201,7 @@ pub fn generate_glam_ix_structs(
                             signer: false,
                         });
 
-                        quote! { #[account(mut)] }
+                        quote! { #[account(mut, constraint = glam_state.enabled @ GlamError::GlamStateDisabled)] }
                     } else {
                         glam_account_infos.push(AccuntInfo {
                             name: "glam_state".to_string(),
@@ -210,7 +210,7 @@ pub fn generate_glam_ix_structs(
                             signer: false,
                         });
 
-                        quote! {}
+                        quote! { #[account(constraint = glam_state.enabled @ GlamError::GlamStateDisabled)] }
                     }
                 })
                 .unwrap_or(quote! {});
@@ -397,6 +397,24 @@ pub fn generate_glam_ix_handler(
         })
         .collect::<Vec<_>>();
 
+    let cpi_ix_args_for_pre_cpi = ix
+        .args
+        .iter()
+        .map(|arg| {
+            let use_ref =
+                if arg.ty == IdlType::Vec(Box::new(IdlType::Defined("OrderParams".to_string()))) {
+                    quote! { & }
+                } else {
+                    quote! {}
+                };
+
+            let name = format_ident!("{}", arg.name.to_snake_case());
+            quote! {
+                #use_ref #name
+            }
+        })
+        .collect::<Vec<_>>();
+
     let mutable_state = ix_code_gen_config.mutable_state;
     let ctx_arg = if mutable_state {
         quote! { mut ctx }
@@ -405,7 +423,7 @@ pub fn generate_glam_ix_handler(
     };
     let pre_cpi = if let Some(pre_cpi) = ix_code_gen_config.pre_cpi.clone() {
         let func = format_ident!("{}", pre_cpi);
-        quote! { crate::utils::pre_cpi::#func(&#ctx_arg, #(#cpi_ix_args),*)?; }
+        quote! { crate::utils::pre_cpi::#func(&#ctx_arg, #(#cpi_ix_args_for_pre_cpi),*)?; }
     } else {
         quote! {}
     };

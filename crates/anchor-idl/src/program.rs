@@ -179,7 +179,7 @@ impl Generator {
             };
 
             quote! {
-                use crate::state::{acl::{self, *}, StateAccount};
+                use crate::{state::{acl::{self, *}, StateAccount}, error::GlamError};
                 use anchor_lang::prelude::*;
 
                 #program_import

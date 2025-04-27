@@ -22,7 +22,7 @@ test_expected=(
 )
 
 test_instructions=(
-    "initializeUserStats initializeUser deleteUser updateUserCustomMarginRatio updateUserDelegate updateUserMarginTradingEnabled deposit withdraw cancelOrders cancelOrdersByIds modifyOrder"
+    "initializeUserStats initializeUser deleteUser placeOrders updateUserCustomMarginRatio updateUserDelegate updateUserMarginTradingEnabled deposit withdraw cancelOrders cancelOrdersByIds modifyOrder"
 )
 
 # Colors for output
