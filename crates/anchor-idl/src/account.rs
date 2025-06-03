@@ -76,6 +76,8 @@ pub fn generate_glam_account_fields(
 ) -> (TokenStream, TokenStream) {
     let vault_aliases =
         ix_code_gen_config.map_or(Vec::new(), |c| c.vault_aliases.clone().unwrap_or_default());
+    let signer_aliases =
+        ix_code_gen_config.map_or(Vec::new(), |c| c.signer_aliases.clone().unwrap_or_default());
 
     let mut all_structs: Vec<TokenStream> = vec![];
 
@@ -128,6 +130,8 @@ pub fn generate_glam_account_fields(
                     );
                 }
                 if vault_aliases.contains(&info.name.to_snake_case()) {
+                    None
+                } else if signer_aliases.contains(&info.name.to_snake_case()) {
                     None
                 } else {
                     accounts_to_keep.push(info.name.to_snake_case());

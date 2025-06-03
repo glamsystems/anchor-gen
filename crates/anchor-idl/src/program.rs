@@ -26,6 +26,7 @@ pub struct GlamIxCodeGenConfig {
     pub integration: Option<String>,
     pub remove_signer: Option<Vec<String>>, // TODO: not being used, consider removing
     pub vault_aliases: Option<Vec<String>>,
+    pub signer_aliases: Option<Vec<String>>, // Accounts that will be hard wired to glam_signer
     // by default accounts struct name is `<ProgramName><IxName>`,
     // this overwrites it with `<ProgramName><AccountsStruct>`,
     // useful when multiple ixs share the same accounts struct

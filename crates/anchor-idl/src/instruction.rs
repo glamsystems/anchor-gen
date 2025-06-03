@@ -429,6 +429,10 @@ pub fn generate_glam_ix_handler(
     };
 
     let vault_aliases = ix_code_gen_config.vault_aliases.clone().unwrap_or_default();
+    let signer_aliases = ix_code_gen_config
+        .signer_aliases
+        .clone()
+        .unwrap_or_default();
 
     let root_account_infos = map_sub_accounts
         .iter()
@@ -446,6 +450,16 @@ pub fn generate_glam_ix_handler(
                         } else {
                             quote! {
                                 #name: ctx.accounts.glam_vault.to_account_info()
+                            }
+                        }
+                    } else if signer_aliases.contains(&account.to_snake_case()) {
+                        if *is_optional {
+                            quote! {
+                                #name: Some(ctx.accounts.glam_signer.to_account_info())
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.glam_signer.to_account_info()
                             }
                         }
                     } else {
@@ -484,6 +498,16 @@ pub fn generate_glam_ix_handler(
                         } else {
                             quote! {
                                 #name: ctx.accounts.glam_vault.to_account_info()
+                            }
+                        }
+                    } else if signer_aliases.contains(&account.to_snake_case()) {
+                        if *is_optional {
+                            quote! {
+                                #name: Some(ctx.accounts.glam_signer.to_account_info())
+                            }
+                        } else {
+                            quote! {
+                                #name: ctx.accounts.glam_signer.to_account_info()
                             }
                         }
                     } else {
