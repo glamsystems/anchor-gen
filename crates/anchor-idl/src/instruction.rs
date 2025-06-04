@@ -414,6 +414,7 @@ pub fn generate_glam_ix_handler(
             }
         })
         .collect::<Vec<_>>();
+    let cpi_ix_args_for_post_cpi = cpi_ix_args_for_pre_cpi.clone();
 
     let mutable_state = ix_code_gen_config.mutable_state;
     let ctx_arg = if mutable_state {
@@ -424,6 +425,12 @@ pub fn generate_glam_ix_handler(
     let pre_cpi = if let Some(pre_cpi) = ix_code_gen_config.pre_cpi.clone() {
         let func = format_ident!("{}", pre_cpi);
         quote! { crate::utils::pre_cpi::#func(&#ctx_arg, #(#cpi_ix_args_for_pre_cpi),*)?; }
+    } else {
+        quote! {}
+    };
+    let post_cpi = if let Some(post_cpi) = ix_code_gen_config.post_cpi.clone() {
+        let func = format_ident!("{}", post_cpi);
+        quote! { ?; crate::utils::post_cpi::#func(&#ctx_arg, #(#cpi_ix_args_for_post_cpi),*) }
     } else {
         quote! {}
     };
@@ -584,6 +591,8 @@ pub fn generate_glam_ix_handler(
                     },
                     glam_vault_signer_seeds
                 )#lt3,#(#cpi_ix_args),*)
+
+                #post_cpi
             }
         }
     } else {
@@ -603,6 +612,8 @@ pub fn generate_glam_ix_handler(
                         #(#root_account_infos)*
                     },
                 ),#(#cpi_ix_args),*)
+
+                #post_cpi
             }
         }
     }
