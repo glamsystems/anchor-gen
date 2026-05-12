@@ -57,27 +57,34 @@ pub fn get_type_list_properties(defs: &[IdlTypeDef], fields: &[IdlType]) -> Fiel
     )
 }
 
+pub fn variant_is_default_eligible(defs: &[IdlTypeDef], variant: &IdlEnumVariant) -> bool {
+    match &variant.fields {
+        None => true,
+        Some(IdlDefinedFields::Named(fields)) => {
+            get_field_list_properties(defs, fields).can_derive_default
+        }
+        Some(IdlDefinedFields::Tuple(fields)) => {
+            get_type_list_properties(defs, fields).can_derive_default
+        }
+    }
+}
+
 pub fn get_variant_list_properties(
     defs: &[IdlTypeDef],
     variants: &[IdlEnumVariant],
 ) -> FieldListProperties {
-    variants.iter().fold(
-        FieldListProperties {
-            can_copy: true,
-            can_derive_default: true,
-        },
-        |acc, el| {
-            let props = match &el.fields {
-                Some(IdlDefinedFields::Named(fields)) => get_field_list_properties(defs, fields),
-                Some(IdlDefinedFields::Tuple(fields)) => get_type_list_properties(defs, fields),
-                None => acc,
-            };
-            FieldListProperties {
-                can_copy: acc.can_copy && props.can_copy,
-                can_derive_default: acc.can_derive_default && props.can_derive_default,
-            }
-        },
-    )
+    let can_copy = variants.iter().all(|v| match &v.fields {
+        None => true,
+        Some(IdlDefinedFields::Named(fields)) => get_field_list_properties(defs, fields).can_copy,
+        Some(IdlDefinedFields::Tuple(fields)) => get_type_list_properties(defs, fields).can_copy,
+    });
+    let can_derive_default = variants
+        .iter()
+        .any(|v| variant_is_default_eligible(defs, v));
+    FieldListProperties {
+        can_copy,
+        can_derive_default,
+    }
 }
 
 pub fn get_type_properties(defs: &[IdlTypeDef], ty: &IdlType) -> FieldListProperties {
@@ -263,58 +270,48 @@ pub fn generate_enum(
         quote! {}
     };
 
-    let default_impl = match variants.first() {
-        Some(IdlEnumVariant {
-            name,
-            fields: Some(IdlDefinedFields::Named(fields)),
-        }) if !fields.is_empty() => {
-            if props.can_derive_default {
-                let variant_ident = format_ident!("{}", name);
-                let field_inits = fields.iter().map(|f| {
-                    let field_name = format_ident!("{}", f.name.to_snake_case());
-                    quote! { #field_name: ::core::default::Default::default() }
-                });
-                quote! {
+    let default_impl = match variants
+        .iter()
+        .find(|v| variant_is_default_eligible(defs, v))
+    {
+        None => quote! {},
+        Some(variant) => {
+            let variant_ident = format_ident!("{}", &variant.name);
+            match &variant.fields {
+                None => quote! {
                     impl Default for #enum_name {
                         fn default() -> Self {
-                            Self::#variant_ident {
-                                #(#field_inits),*
+                            Self::#variant_ident
+                        }
+                    }
+                },
+                Some(IdlDefinedFields::Named(fields)) => {
+                    let field_inits = fields.iter().map(|f| {
+                        let field_name = format_ident!("{}", f.name.to_snake_case());
+                        quote! { #field_name: ::core::default::Default::default() }
+                    });
+                    quote! {
+                        impl Default for #enum_name {
+                            fn default() -> Self {
+                                Self::#variant_ident {
+                                    #(#field_inits),*
+                                }
                             }
                         }
                     }
                 }
-            } else {
-                quote! {}
-            }
-        }
-        Some(IdlEnumVariant {
-            name,
-            fields: Some(IdlDefinedFields::Tuple(types)),
-        }) if !types.is_empty() => {
-            if props.can_derive_default {
-                let variant_ident = format_ident!("{}", name);
-                let placeholders = types
-                    .iter()
-                    .map(|_| quote! { ::core::default::Default::default() });
-                quote! {
-                    impl Default for #enum_name {
-                        fn default() -> Self {
-                            Self::#variant_ident(#(#placeholders),*)
+                Some(IdlDefinedFields::Tuple(types)) => {
+                    let placeholders = types
+                        .iter()
+                        .map(|_| quote! { ::core::default::Default::default() });
+                    quote! {
+                        impl Default for #enum_name {
+                            fn default() -> Self {
+                                Self::#variant_ident(#(#placeholders),*)
+                            }
                         }
                     }
                 }
-            } else {
-                quote! {}
-            }
-        }
-        _ => {
-            let default_variant = format_ident!("{}", variants.first().unwrap().name);
-            quote! {
-              impl Default for #enum_name {
-                  fn default() -> Self {
-                      Self::#default_variant
-                  }
-              }
             }
         }
     };
