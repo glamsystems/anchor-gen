@@ -80,21 +80,26 @@ pub fn generate_accounts(
                 .find(|type_def| type_def.name == account.name)
                 .unwrap()
         })
-        .map(|def| match &def.ty {
-            anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } => {
-                let opts = struct_opts.get(&def.name).copied().unwrap_or_default();
-                generate_account(
+        .map(|def| {
+            let opts = struct_opts.get(&def.name).copied().unwrap_or_default();
+            if opts.skip {
+                return quote! {};
+            }
+            match &def.ty {
+                anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } => generate_account(
                     typedefs,
                     &def.name,
                     get_idl_defined_fields_as_slice(fields),
                     opts,
-                )
-            }
-            anchor_lang_idl_spec::IdlTypeDefTy::Enum { .. } => {
-                panic!("unexpected enum account");
-            }
-            anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
-                panic!("unexpected type account")
+                ),
+                anchor_lang_idl_spec::IdlTypeDefTy::Enum { .. } => {
+                    let msg = format!("anchor-gen: account `{}` is an enum, not supported", def.name);
+                    quote! { compile_error!(#msg); }
+                }
+                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
+                    let msg = format!("anchor-gen: account `{}` is a type alias, not supported", def.name);
+                    quote! { compile_error!(#msg); }
+                }
             }
         });
     quote! {

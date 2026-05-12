@@ -123,7 +123,9 @@ pub fn get_type_properties(defs: &[IdlTypeDef], ty: &IdlType) -> FieldListProper
                 anchor_lang_idl_spec::IdlTypeDefTy::Enum { variants } => {
                     get_variant_list_properties(defs, variants)
                 }
-                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => todo!(),
+                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
+                    panic!("anchor-gen: type alias `{}` is not supported", name)
+                }
             }
         }
         IdlType::Option(inner) => get_type_properties(defs, inner),
@@ -138,10 +140,12 @@ pub fn get_type_properties(defs: &[IdlTypeDef], ty: &IdlType) -> FieldListProper
                 can_derive_default: can_derive_array_len && inner.can_derive_default,
             }
         }
-        IdlType::U256 => todo!(),
-        IdlType::I256 => todo!(),
-        IdlType::Generic(_) => todo!(),
-        _ => todo!(),
+        IdlType::U256 => panic!("anchor-gen: IdlType::U256 is not supported"),
+        IdlType::I256 => panic!("anchor-gen: IdlType::I256 is not supported"),
+        IdlType::Generic(name) => {
+            panic!("anchor-gen: generic type parameter `{}` is not supported", name)
+        }
+        other => panic!("anchor-gen: unsupported IdlType variant: {:?}", other),
     }
 }
 
@@ -347,7 +351,13 @@ pub fn generate_typedefs(
                 anchor_lang_idl_spec::IdlTypeDefTy::Enum { variants } => {
                     generate_enum(typedefs, &struct_name, variants)
                 }
-                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => todo!(),
+                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
+                    let msg = format!(
+                        "anchor-gen: type alias `{}` is not supported",
+                        def.name
+                    );
+                    quote! { compile_error!(#msg); }
+                }
             }
         }
     });

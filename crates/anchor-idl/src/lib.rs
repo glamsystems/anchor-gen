@@ -50,9 +50,11 @@ pub fn ty_to_rust_type(ty: &IdlType) -> String {
             }
         },
         IdlType::Defined { name, generics: _ } => name.to_string(),
-        IdlType::U256 => todo!(),
-        IdlType::I256 => todo!(),
-        IdlType::Generic(_) => todo!(),
-        _ => todo!(),
+        IdlType::U256 => panic!("anchor-gen: IdlType::U256 is not supported"),
+        IdlType::I256 => panic!("anchor-gen: IdlType::I256 is not supported"),
+        IdlType::Generic(name) => {
+            panic!("anchor-gen: generic type parameter `{}` is not supported", name)
+        }
+        other => panic!("anchor-gen: unsupported IdlType variant: {:?}", other),
     }
 }

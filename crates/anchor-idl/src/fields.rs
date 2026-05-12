@@ -22,7 +22,9 @@ pub fn get_idl_defined_fields_as_slice(fields: &Option<IdlDefinedFields>) -> &[I
     match fields {
         Some(IdlDefinedFields::Named(fields)) => fields,
         None => &[],
-        _ => todo!(),
+        Some(IdlDefinedFields::Tuple(_)) => {
+            panic!("anchor-gen: tuple-style struct fields are not supported")
+        }
     }
 }
 
@@ -31,7 +33,11 @@ pub fn generate_struct_fields(fields: &Option<IdlDefinedFields>) -> TokenStream 
     if let Some(fields) = fields {
         match fields {
             IdlDefinedFields::Named(fields) => generate_struct_fields_from_slice(fields),
-            IdlDefinedFields::Tuple(_) => todo!(),
+            IdlDefinedFields::Tuple(_) => {
+                quote! {
+                    compile_error!("anchor-gen: tuple-style struct fields are not supported");
+                }
+            }
         }
     } else {
         quote! {}
