@@ -265,16 +265,47 @@ pub fn generate_enum(
 
     let default_impl = match variants.first() {
         Some(IdlEnumVariant {
+            name,
             fields: Some(IdlDefinedFields::Named(fields)),
-            ..
         }) if !fields.is_empty() => {
-            quote! {}
+            if props.can_derive_default {
+                let variant_ident = format_ident!("{}", name);
+                let field_inits = fields.iter().map(|f| {
+                    let field_name = format_ident!("{}", f.name.to_snake_case());
+                    quote! { #field_name: ::core::default::Default::default() }
+                });
+                quote! {
+                    impl Default for #enum_name {
+                        fn default() -> Self {
+                            Self::#variant_ident {
+                                #(#field_inits),*
+                            }
+                        }
+                    }
+                }
+            } else {
+                quote! {}
+            }
         }
         Some(IdlEnumVariant {
+            name,
             fields: Some(IdlDefinedFields::Tuple(types)),
-            ..
         }) if !types.is_empty() => {
-            quote! {}
+            if props.can_derive_default {
+                let variant_ident = format_ident!("{}", name);
+                let placeholders = types
+                    .iter()
+                    .map(|_| quote! { ::core::default::Default::default() });
+                quote! {
+                    impl Default for #enum_name {
+                        fn default() -> Self {
+                            Self::#variant_ident(#(#placeholders),*)
+                        }
+                    }
+                }
+            } else {
+                quote! {}
+            }
         }
         _ => {
             let default_variant = format_ident!("{}", variants.first().unwrap().name);
