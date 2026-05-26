@@ -8,7 +8,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 
 use crate::{
-    fields::{generate_struct_fields, get_idl_defined_fields_as_slice},
+    fields::{generate_struct_fields, generate_tuple_struct_fields_from_slice},
     StructOpts,
 };
 
@@ -118,7 +118,7 @@ pub fn get_type_properties(defs: &[IdlTypeDef], ty: &IdlType) -> FieldListProper
             let def = defs.iter().find(|def| def.name == *name).unwrap();
             match &def.ty {
                 anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } => {
-                    get_field_list_properties(defs, get_idl_defined_fields_as_slice(fields))
+                    get_defined_fields_list_properties(defs, fields)
                 }
                 anchor_lang_idl_spec::IdlTypeDefTy::Enum { variants } => {
                     get_variant_list_properties(defs, variants)
@@ -143,7 +143,10 @@ pub fn get_type_properties(defs: &[IdlTypeDef], ty: &IdlType) -> FieldListProper
         IdlType::U256 => panic!("anchor-gen: IdlType::U256 is not supported"),
         IdlType::I256 => panic!("anchor-gen: IdlType::I256 is not supported"),
         IdlType::Generic(name) => {
-            panic!("anchor-gen: generic type parameter `{}` is not supported", name)
+            panic!(
+                "anchor-gen: generic type parameter `{}` is not supported",
+                name
+            )
         }
         other => panic!("anchor-gen: unsupported IdlType variant: {:?}", other),
     }
@@ -186,7 +189,7 @@ pub fn generate_struct(
     opts: StructOpts,
 ) -> TokenStream {
     let fields_rendered = generate_struct_fields(fields);
-    let props = get_field_list_properties(defs, get_idl_defined_fields_as_slice(fields));
+    let props = get_defined_fields_list_properties(defs, fields);
 
     let derive_default = if props.can_derive_default {
         quote! {
@@ -224,13 +227,24 @@ pub fn generate_struct(
         }
     };
 
-    quote! {
-        #derive_serializers
-        #[derive(Debug)]
-        #derive_default
-        pub struct #struct_name {
-            #fields_rendered
+    match fields {
+        Some(IdlDefinedFields::Tuple(fields)) => {
+            let fields_rendered = generate_tuple_struct_fields_from_slice(fields);
+            quote! {
+                #derive_serializers
+                #[derive(Debug)]
+                #derive_default
+                pub struct #struct_name(#fields_rendered);
+            }
         }
+        _ => quote! {
+            #derive_serializers
+            #[derive(Debug)]
+            #derive_default
+            pub struct #struct_name {
+                #fields_rendered
+            }
+        },
     }
 }
 
@@ -352,10 +366,7 @@ pub fn generate_typedefs(
                     generate_enum(typedefs, &struct_name, variants)
                 }
                 anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
-                    let msg = format!(
-                        "anchor-gen: type alias `{}` is not supported",
-                        def.name
-                    );
+                    let msg = format!("anchor-gen: type alias `{}` is not supported", def.name);
                     quote! { compile_error!(#msg); }
                 }
             }

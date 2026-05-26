@@ -7,6 +7,7 @@ use quote::{format_ident, quote};
 pub fn generate_ix_handler(ix: &IdlInstruction) -> TokenStream {
     let ix_name = format_ident!("{}", ix.name.to_snake_case());
     let accounts_name = format_ident!("{}", ix.name.to_pascal_case());
+    let discriminator = crate::discriminator_expr(&ix.discriminator);
 
     let args = ix
         .args
@@ -23,6 +24,7 @@ pub fn generate_ix_handler(ix: &IdlInstruction) -> TokenStream {
 
     if cfg!(feature = "compat-program-result") {
         quote! {
+            #[instruction(discriminator = #discriminator)]
             pub fn #ix_name(
                 _ctx: Context<#accounts_name>,
                 #(#args),*
@@ -32,6 +34,7 @@ pub fn generate_ix_handler(ix: &IdlInstruction) -> TokenStream {
         }
     } else {
         quote! {
+            #[instruction(discriminator = #discriminator)]
             pub fn #ix_name(
                 _ctx: Context<#accounts_name>,
                 #(#args),*
@@ -81,5 +84,25 @@ pub fn generate_ix_handlers(ixs: &[IdlInstruction]) -> TokenStream {
     let streams = ixs.iter().map(generate_ix_handler);
     quote! {
         #(#streams)*
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_ix_handler_uses_idl_discriminator() {
+        let ix: IdlInstruction = serde_json::from_value(serde_json::json!({
+            "name": "merge",
+            "discriminator": [5],
+            "accounts": [],
+            "args": []
+        }))
+        .unwrap();
+
+        let tokens = generate_ix_handler(&ix).to_string().replace(' ', "");
+
+        assert!(tokens.contains("#[instruction(discriminator=[5])]"));
     }
 }

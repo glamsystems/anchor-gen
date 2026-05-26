@@ -13,9 +13,11 @@ pub fn generate_event(
     defs: &[IdlTypeDef],
     struct_name: &Ident,
     fields: &Option<IdlDefinedFields>,
+    discriminator: &[u8],
 ) -> TokenStream {
     let fields_rendered = generate_struct_fields(fields);
     let props = get_field_list_properties(defs, get_idl_defined_fields_as_slice(fields));
+    let discriminator = crate::discriminator_expr(discriminator);
 
     let derive_default = if props.can_derive_default {
         quote! {
@@ -26,7 +28,7 @@ pub fn generate_event(
     };
 
     quote! {
-        #[event]
+        #[event(discriminator = #discriminator)]
         #[derive(Debug)]
         #derive_default
         pub struct #struct_name {
@@ -49,7 +51,7 @@ pub fn generate_events(
         } else {
             let typedef = typedefs.iter().find(|d| d.name == def.name).unwrap();
             if let anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } = &typedef.ty {
-                generate_event(typedefs, &struct_name, fields)
+                generate_event(typedefs, &struct_name, fields, &def.discriminator)
             } else {
                 quote! {}
             }

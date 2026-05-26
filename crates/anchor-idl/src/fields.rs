@@ -28,16 +28,28 @@ pub fn get_idl_defined_fields_as_slice(fields: &Option<IdlDefinedFields>) -> &[I
     }
 }
 
+/// Generates tuple struct fields from a list of [IdlType]s.
+pub fn generate_tuple_struct_fields_from_slice(
+    fields: &[anchor_lang_idl_spec::IdlType],
+) -> TokenStream {
+    let fields_rendered = fields.iter().map(|ty| {
+        let type_name = crate::ty_to_rust_type(ty);
+        let stream: proc_macro2::TokenStream = type_name.parse().unwrap();
+        quote! {
+            pub #stream
+        }
+    });
+    quote! {
+        #(#fields_rendered),*
+    }
+}
+
 /// Generates struct fields from a list of [IdlField]s.
 pub fn generate_struct_fields(fields: &Option<IdlDefinedFields>) -> TokenStream {
     if let Some(fields) = fields {
         match fields {
             IdlDefinedFields::Named(fields) => generate_struct_fields_from_slice(fields),
-            IdlDefinedFields::Tuple(_) => {
-                quote! {
-                    compile_error!("anchor-gen: tuple-style struct fields are not supported");
-                }
-            }
+            IdlDefinedFields::Tuple(fields) => generate_tuple_struct_fields_from_slice(fields),
         }
     } else {
         quote! {}

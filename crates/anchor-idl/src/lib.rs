@@ -17,6 +17,13 @@ pub use program::*;
 pub use state::*;
 pub use typedef::*;
 
+pub(crate) fn discriminator_expr(discriminator: &[u8]) -> proc_macro2::TokenStream {
+    let bytes = discriminator
+        .iter()
+        .map(|byte| proc_macro2::Literal::u8_unsuffixed(*byte));
+    quote::quote!([#(#bytes),*])
+}
+
 /// Version of anchor-idl.
 pub const GEN_VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
 
@@ -53,7 +60,10 @@ pub fn ty_to_rust_type(ty: &IdlType) -> String {
         IdlType::U256 => panic!("anchor-gen: IdlType::U256 is not supported"),
         IdlType::I256 => panic!("anchor-gen: IdlType::I256 is not supported"),
         IdlType::Generic(name) => {
-            panic!("anchor-gen: generic type parameter `{}` is not supported", name)
+            panic!(
+                "anchor-gen: generic type parameter `{}` is not supported",
+                name
+            )
         }
         other => panic!("anchor-gen: unsupported IdlType variant: {:?}", other),
     }

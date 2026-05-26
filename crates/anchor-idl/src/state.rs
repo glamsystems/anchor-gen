@@ -15,8 +15,10 @@ pub fn generate_account(
     account_name: &str,
     fields: &[IdlField],
     opts: StructOpts,
+    discriminator: &[u8],
 ) -> TokenStream {
     let props = get_field_list_properties(defs, fields);
+    let discriminator = crate::discriminator_expr(discriminator);
 
     let derive_copy = if props.can_copy && !opts.zero_copy {
         quote! {
@@ -43,12 +45,12 @@ pub fn generate_account(
             }
         };
         quote! {
-            #[account(zero_copy(unsafe))]
+            #[account(zero_copy(unsafe), discriminator = #discriminator)]
             #repr
         }
     } else {
         quote! {
-            #[account]
+            #[account(discriminator = #discriminator)]
         }
     };
 
@@ -72,36 +74,39 @@ pub fn generate_accounts(
     account_defs: &[IdlAccount],
     struct_opts: &BTreeMap<String, StructOpts>,
 ) -> TokenStream {
-    let defined = account_defs
-        .iter()
-        .map(|account| {
-            typedefs
-                .iter()
-                .find(|type_def| type_def.name == account.name)
-                .unwrap()
-        })
-        .map(|def| {
-            let opts = struct_opts.get(&def.name).copied().unwrap_or_default();
-            if opts.skip {
-                return quote! {};
+    let defined = account_defs.iter().map(|account| {
+        let def = typedefs
+            .iter()
+            .find(|type_def| type_def.name == account.name)
+            .unwrap();
+        let opts = struct_opts.get(&def.name).copied().unwrap_or_default();
+        if opts.skip {
+            return quote! {};
+        }
+        match &def.ty {
+            anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } => generate_account(
+                typedefs,
+                &def.name,
+                get_idl_defined_fields_as_slice(fields),
+                opts,
+                &account.discriminator,
+            ),
+            anchor_lang_idl_spec::IdlTypeDefTy::Enum { .. } => {
+                let msg = format!(
+                    "anchor-gen: account `{}` is an enum, not supported",
+                    def.name
+                );
+                quote! { compile_error!(#msg); }
             }
-            match &def.ty {
-                anchor_lang_idl_spec::IdlTypeDefTy::Struct { fields } => generate_account(
-                    typedefs,
-                    &def.name,
-                    get_idl_defined_fields_as_slice(fields),
-                    opts,
-                ),
-                anchor_lang_idl_spec::IdlTypeDefTy::Enum { .. } => {
-                    let msg = format!("anchor-gen: account `{}` is an enum, not supported", def.name);
-                    quote! { compile_error!(#msg); }
-                }
-                anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
-                    let msg = format!("anchor-gen: account `{}` is a type alias, not supported", def.name);
-                    quote! { compile_error!(#msg); }
-                }
+            anchor_lang_idl_spec::IdlTypeDefTy::Type { alias: _ } => {
+                let msg = format!(
+                    "anchor-gen: account `{}` is a type alias, not supported",
+                    def.name
+                );
+                quote! { compile_error!(#msg); }
             }
-        });
+        }
+    });
     quote! {
         #(#defined)*
     }
